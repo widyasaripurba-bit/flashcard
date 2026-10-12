@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Voice Flashcard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#f4f7f6;--card:#fff;--ac:#2196F3;--tx:#222}
+body[data-theme=ocean]{--bg:#e0f4ff;--ac:#0277bd}
+body[data-theme=sakura]{--bg:#ffeaf2;--ac:#d81b60}
+body[data-theme=forest]{--bg:#e6f4e6;--ac:#2e7d32}
+body[data-theme=night]{--bg:#1c2233;--card:#2a3149;--ac:#7c9cff;--tx:#eee}
+body{font-family:sans-serif;background:var(--bg);color:var(--tx);margin:0;padding:16px}
+.card{background:var(--card);max-width:520px;margin:0 auto 12px;padding:20px;border-radius:12px;box-shadow:0 4px 8px rgba(0,0,0,.1)}
+button{padding:10px 16px;margin:4px;font-size:15px;border:none;border-radius:6px;cursor:pointer;background:var(--ac);color:#fff}
+button:disabled{opacity:.4}
+.g{background:#4CAF50}.r{background:#f44336}.o{background:#888}
+input,textarea,select{width:100%;box-sizing:border-box;padding:8px;margin:4px 0;font-size:15px}
+.box{padding:10px;border:1px solid #ccc;border-radius:6px;margin:6px 0;background:#fff;color:#222;min-height:20px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #8883}
+.pts{font-weight:bold;font-size:18px}
+.big{font-size:20px;line-height:1.4}
+.pet{border:1px solid #8884;border-radius:10px;padding:12px;margin:8px 0;text-align:center;position:relative}
+.em{font-size:64px;cursor:pointer;display:inline-block;animation:bob 2s ease-in-out infinite}
+.em.wig{animation:wig .5s 2}
+@keyframes bob{50%{transform:translateY(-6px)}}
+@keyframes wig{25%{transform:rotate(-15deg)}75%{transform:rotate(15deg)}}
+.fly{position:absolute;left:50%;top:40px;font-size:28px;animation:fly 1s forwards;pointer-events:none}
+@keyframes fly{to{transform:translateY(-80px);opacity:0}}
+.bar{height:8px;background:#8883;border-radius:4px;margin:6px 0;overflow:hidden}
+.bar i{display:block;height:100%;background:#4CAF50}
+.yard{position:relative;height:200px;border-radius:10px;background:linear-gradient(#bde7ff 55%,#8bc34a 55%);overflow:hidden;margin-bottom:8px}
+.yp{position:absolute;font-size:40px;transition:left 2.5s ease-in-out,top 2.5s ease-in-out}
+.bub{position:absolute;top:-22px;left:0;font-size:14px;white-space:nowrap;background:#fffd;color:#222;border-radius:8px;padding:0 6px}
+.hide{display:none}
+</style>
+</head>
+<body>
+
+<div class="card"><span class="pts">⭐ <span id="pts">0</span></span> <span id="streak"></span>
+  <span id="msg" style="float:right"></span></div>
+
+<!-- HOME -->
+<div id="v-home" class="card">
+  <h2>Voice Flashcard</h2>
+  <div id="home-away"></div>
+  <div id="decks">Memuat...</div>
+  <button onclick="show('new')">+ Tambah deck / kartu</button>
+  <button class="o" onclick="openShop()">🛒 Toko</button>
+  <button class="g" onclick="openRoom()">🏠 Kandang Hewan</button>
+  <button class="o" onclick="resetCfg()">⚙️ Ganti URL/kunci</button>
+</div>
+
+<!-- NEW -->
+<div id="v-new" class="card hide">
+  <h3>Tambah kartu</h3>
+  <input id="n-title" placeholder="Judul deck (judul sama = tambah ke deck lama)">
+  <select id="n-lang"><option value="en-US">Bahasa Inggris</option><option value="id-ID">Bahasa Indonesia</option></select>
+  <textarea id="n-text" rows="8" placeholder="Satu kartu per baris"></textarea>
+  <button onclick="saveNew()">Simpan</button>
+  <button class="o" onclick="show('home')">Kembali</button>
+</div>
+
+<!-- STUDY -->
+<div id="v-study" class="card hide">
+  <p id="st-info"></p>
+  <div id="st-text" class="box big"></div>
+  <div id="st-btns">
+    <button onclick="listen()">🔊 Dengarkan</button>
+    <button class="g" onclick="speakNow()">🎤 Sudah hapal, aku ucapkan</button>
+  </div>
+  <p id="st-status"></p>
+  <div id="st-fallback" class="hide">
+    <input id="st-typed" placeholder="Mic bermasalah? Ketik di sini">
+    <button onclick="submitTyped()">Kirim</button>
+  </div>
+  <div id="st-result" class="hide">
+    <b>Teks asli:</b><div id="r-orig" class="box"></div>
+    <b>Yang kamu ucapkan:</b><div id="r-heard" class="box"></div>
+    <p id="r-sim"></p>
+    <p>Apakah sudah sesuai?</p>
+    <button class="g" onclick="judge(true)">Sudah sesuai (+20)</button>
+    <button class="r" onclick="judge(false)">Belum</button>
+  </div>
+  <button class="o" onclick="quit()">Berhenti (poin tetap aman)</button>
+</div>
+
+<!-- ROOM -->
+<div id="v-room" class="card hide">
+  <h3>Kandang Hewan</h3>
+  <div id="yard" class="yard"></div>
+  <div id="room-pets"></div>
+  <button class="o" onclick="show('home')">Kembali</button>
+</div>
+
+<!-- SHOP -->
+<div id="v-shop" class="card hide">
+  <h3>Tema (2000)</h3><div id="s-themes"></div>
+  <h3>Hewan (3000)</h3><div id="s-pets"></div>
+  <button class="o" onclick="show('home')">Kembali</button>
+</div>
+
+<script>
+const THEME_NAMES={default:'Klasik',ocean:'Samudra',sakura:'Sakura',forest:'Hutan',night:'Malam'};
+const PET_INFO={cat:['🐱','Kucing'],dog:['🐶','Anjing'],rabbit:['🐰','Kelinci']};
+const $=id=>document.getElementById(id);
+// URL web app + kunci diminta sekali, disimpan di HP ini (localStorage)
+function cfg(k,ask){
+  let v='';try{v=localStorage.getItem(k)||''}catch(e){}
+  if(!v||ask){v=(prompt(ask||'')||'').trim();if(v){try{localStorage.setItem(k,v)}catch(e){}}}
+  return v;
+}
+function resetCfg(){try{localStorage.removeItem('vf_url');localStorage.removeItem('vf_key')}catch(e){}location.reload();}
+async function api(fn,...a){
+  let url,key;
+  try{url=localStorage.getItem('vf_url');key=localStorage.getItem('vf_key')}catch(e){}
+  if(!url)url=cfg('vf_url','Tempel URL Web App Apps Script (berakhiran /exec):');
+  if(!key)key=cfg('vf_key','Masukkan kunci API_KEY:');
+  if(!url||!key)throw new Error('URL/kunci belum diisi.');
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({fn,args:a,key})});
+  const j=await r.json();
+  if(!j.ok){if(/Kunci salah/.test(j.error))try{localStorage.removeItem('vf_key')}catch(e){}throw new Error(j.error);}
+  return j.data;
+}
+let S,decks=[],deck,queue=[],qi=0,rep=0,need=1,busy=false;
+
+function show(v){['home','new','study','shop','room'].forEach(x=>$('v-'+x).classList.toggle('hide',x!==v));}
+function flash(t){$('msg').innerText=t;setTimeout(()=>$('msg').innerText='',2500);}
+function setState(s){S=s;$('pts').innerText=s.points;document.body.dataset.theme=s.theme;
+  $('streak').innerText=s.streak&&s.streak.count?'🔥 '+s.streak.count+' hari':'';}
+async function guard(p){try{return await p}catch(e){flash('Error: '+(e.message||e));throw e}}
+
+async function init(){
+  const d=await guard(api('getBootstrap'));
+  decks=d.decks;setState(d.state);renderDecks();show('home');
+  $('home-away').innerHTML=awayStory(d.away||0);
+}
+function renderDecks(){
+  $('decks').innerHTML=decks.length?'':'<p>Belum ada deck.</p>';
+  decks.forEach(d=>{
+    const r=document.createElement('div');r.className='row';
+    r.innerHTML='<span>'+esc(d.title)+' ('+d.n+')</span>';
+    const b=document.createElement('button');b.innerText='Main';b.disabled=!d.n;
+    b.onclick=()=>startDeck(d);r.appendChild(b);$('decks').appendChild(r);
+  });
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+async function saveNew(){
+  if(busy)return;busy=true;
+  try{
+    const n=await guard(api('saveCards',$('n-title').value,$('n-lang').value,$('n-text').value));
+    flash(n+' kartu tersimpan');$('n-text').value='';
+    await init();
+  }finally{busy=false}
+}
+
+// ---------- belajar ----------
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+// Pengulangan: ~1x per 7 kata (maks 5x). Ini heuristik, bukan rumus baku.
+function repsFor(t){return Math.max(1,Math.min(5,Math.ceil(t.trim().split(/\s+/).length/7)))}
+
+async function startDeck(d){
+  deck=d;queue=shuffle(await guard(api('getCards',d.id)));qi=0;
+  if(!queue.length)return flash('Deck kosong');
+  loadCard();show('study');
+}
+function loadCard(){need=repsFor(queue[qi]);rep=0;readPhase();}
+function readPhase(){
+  $('st-info').innerText=deck.title+' · Kartu '+(qi+1)+'/'+queue.length+' · Ulangan '+(rep+1)+'/'+need;
+  $('st-text').innerText=queue[qi];$('st-text').classList.remove('hide');
+  $('st-btns').classList.remove('hide');$('st-result').classList.add('hide');
+  $('st-status').innerText='Baca & hapalkan, lalu ucapkan.';
+}
+function listen(){
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(queue[qi]);u.lang=deck.lang;u.rate=.9;speechSynthesis.speak(u);
+}
+function speakNow(){
+  speechSynthesis.cancel();
+  $('st-text').classList.add('hide'); // teks disembunyikan: uji hapalan
+  $('st-fallback').classList.remove('hide');
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){$('st-status').innerText='Browser tidak mendukung mic. Ketik jawabanmu.';return;}
+  const rc=new SR();rc.lang=deck.lang;rc.interimResults=false;rc.maxAlternatives=1;
+  $('st-status').innerText='🎤 Mendengarkan...';
+  rc.onresult=e=>showResult(e.results[0][0].transcript);
+  rc.onspeechend=()=>rc.stop();
+  rc.onerror=e=>{$('st-status').innerText='Mic error: '+e.error+'. Silakan ketik jawabanmu.';};
+  try{rc.start()}catch(e){$('st-status').innerText='Mic tidak bisa dimulai. Ketik jawabanmu.'}
+}
+function submitTyped(){const v=$('st-typed').value.trim();if(v){showResult(v);$('st-typed').value='';}}
+const words=t=>t.toLowerCase().replace(/[^\p{L}\p{N}\s']/gu,' ').split(/\s+/).filter(Boolean);
+function showResult(heard){
+  const o=words(queue[qi]),h=words(heard),pool=h.slice();let m=0;
+  o.forEach(w=>{const i=pool.indexOf(w);if(i>=0){m++;pool.splice(i,1)}});
+  $('r-orig').innerText=queue[qi];$('r-heard').innerText=heard;
+  $('r-sim').innerText='Kemiripan kata: '+Math.round(100*m/Math.max(1,o.length))+'% (hanya petunjuk, kamu yang menilai)';
+  $('st-status').innerText='';$('st-btns').classList.add('hide');$('st-fallback').classList.add('hide');
+  $('st-result').classList.remove('hide');
+}
+async function judge(ok){
+  if(busy)return;busy=true;
+  try{
+    const s=await guard(api('answer',ok));setState(s);   // poin langsung tersimpan di Sheet
+    if(!ok){flash('Coba lagi');readPhase();return;}
+    const ps=Object.keys(S.pets);
+    flash('+20'+(s.bonus?' +'+s.bonus+' bonus streak 🔥':'')+' '+(ps.length?PET_INFO[ps[Math.floor(Math.random()*ps.length)]][0]+' bangga!':''));rep++;
+    if(rep<need){readPhase();return;}
+    qi++;
+    if(qi>=queue.length){alert('Deck selesai! 🎉');quit();}else loadCard();
+  }finally{busy=false}
+}
+function quit(){speechSynthesis.cancel();$('st-fallback').classList.add('hide');init();}
+
+// ---------- toko ----------
+function openShop(){renderShop();show('shop');}
+function renderShop(){
+  const t=$('s-themes');t.innerHTML='';
+  Object.keys(THEME_NAMES).forEach(id=>{
+    const own=S.themes.includes(id),r=document.createElement('div');r.className='row';
+    r.innerHTML='<span>'+THEME_NAMES[id]+(S.theme===id?' ✓':'')+'</span>';
+    const b=document.createElement('button');
+    if(own){b.innerText='Pakai';b.onclick=()=>buy('use',id);}else{b.innerText='Beli 2000';b.onclick=()=>buy('theme',id);}
+    r.appendChild(b);t.appendChild(r);
+  });
+  const p=$('s-pets');p.innerHTML='';
+  Object.keys(PET_INFO).forEach(id=>{
+    const [em,nm]=PET_INFO[id],st=S.pets[id],r=document.createElement('div');r.className='row';
+    r.innerHTML='<span>'+em+' '+nm+(st?' · makan '+st.fed+'x · mainan '+st.toys:'')+'</span>';
+    const w=document.createElement('span');
+    if(!st){w.innerHTML='<button onclick="buy(\'pet\',\''+id+'\')">Beli 3000</button>';}
+    else{w.innerText='Dimiliki ✓';}
+    r.appendChild(w);p.appendChild(r);
+  });
+}
+async function buy(kind,id){
+  if(busy)return;busy=true;
+  try{const r=await guard(api('buy',kind,id));setState(r.state);flash(r.msg);renderShop();}finally{busy=false}
+}
+
+// ---------- kegiatan hewan ----------
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const ACT={
+  cat:['🐾 keliling halaman','😴 tidur siang','🦋 mengejar kupu-kupu','🧶 main benang'],
+  dog:['🐾 keliling halaman','🦴 menggali tulang','🎾 mengejar bola','😴 tidur siang'],
+  rabbit:['🐾 keliling halaman','🥕 mencari wortel','🌼 makan rumput','😴 tidur siang']
+};
+let yardTimer=null;
+function startYard(){
+  const y=$('yard'),ids=Object.keys(S.pets);
+  y.style.display=ids.length?'block':'none';
+  y.innerHTML='<span style="position:absolute;left:6px;bottom:34px;font-size:36px">🌳</span><span style="position:absolute;right:8px;bottom:40px;font-size:30px">🌸</span>';
+  ids.forEach((id,i)=>{
+    const e=document.createElement('div');e.className='yp';e.id='yp-'+id;
+    e.style.left=(15+i*25)+'%';e.style.top='55%';
+    e.innerHTML=PET_INFO[id][0]+'<div class="bub"></div>';y.appendChild(e);
+  });
+  clearInterval(yardTimer);yardTimer=setInterval(tick,3500);tick();
+}
+function tick(){
+  if($('v-room').classList.contains('hide')){clearInterval(yardTimer);return;}
+  const ids=Object.keys(S.pets);if(!ids.length)return;
+  // kadang dua hewan berkumpul dan bermain bersama
+  const pair=ids.length>1&&Math.random()<.4?shuffle(ids.slice()).slice(0,2):null;
+  const px=10+Math.random()*55,py=45+Math.random()*35;
+  ids.forEach(id=>{
+    const e=$('yp-'+id);if(!e)return;
+    const tg=pair&&pair.includes(id);
+    e.style.left=(tg?px+(id===pair[0]?0:12):10+Math.random()*65)+'%';
+    e.style.top=(tg?py:45+Math.random()*35)+'%';
+    e.querySelector('.bub').innerText=tg?'💞 bermain bersama':(hungry(S.pets[id])&&Math.random()<.3?'🍖 lapar':pick(ACT[id]));
+  });
+}
+// Cerita "selama kamu pergi" dibuat saat aplikasi dibuka, hanya sebagai hiburan (tanpa poin)
+function awayStory(ms){
+  const ids=Object.keys(S.pets);
+  if(!ids.length||ms<6e5)return '';
+  const dur=ms<36e5?Math.round(ms/6e4)+' menit':ms<864e5*2?Math.round(ms/36e5)+' jam':Math.round(ms/864e5)+' hari';
+  const l=ids.map(id=>PET_INFO[id][0]+' '+PET_INFO[id][1]+': '+pick(ACT[id])+(hungry(S.pets[id])?' (sekarang lapar 🍖)':''));
+  if(ids.length>1)l.push('💞 '+ids.map(id=>PET_INFO[id][1]).join(' & ')+' bermain bersama');
+  return '<div class="box"><b>Selama kamu pergi ('+dur+'):</b><br>'+l.join('<br>')+'</div>';
+}
+
+// ---------- kandang hewan ----------
+const TOY={cat:'🧶',dog:'🎾',rabbit:'🎈'};
+const lvl=p=>Math.floor((p.xp||0)/50)+1;
+const hungry=p=>Date.now()-(p.lastFed||0)>864e5; // lapar jika >24 jam belum diberi makan
+function openRoom(){$('home-away').innerHTML='';renderRoom();show('room');startYard();}
+function renderRoom(){
+  const r=$('room-pets');r.innerHTML='';
+  const ids=Object.keys(S.pets);
+  if(!ids.length){r.innerHTML='<p>Belum punya hewan. Beli di Toko (3000 poin) 🐾</p>';return;}
+  ids.forEach(id=>{
+    const p=S.pets[id],[em,nm]=PET_INFO[id],d=document.createElement('div');
+    d.className='pet';d.id='pet-'+id;
+    d.innerHTML='<div class="em" onclick="pat(\''+id+'\')">'+em+'</div>'
+      +'<div>'+nm+' · Lv '+lvl(p)+' · '+(hungry(p)?'😋 lapar':'😊 kenyang')+'</div>'
+      +'<div class="bar"><i style="width:'+(((p.xp||0)%50)*2)+'%"></i></div>'
+      +'<div>Mainan '+TOY[id]+' × '+(p.toys||0)+' · Main '+(p.plays||0)+'×</div>'
+      +'<button onclick="act(\'feed\',\''+id+'\')">🍖 Makan (30)</button>'
+      +'<button class="g" onclick="act(\'play\',\''+id+'\')">'+TOY[id]+' Main</button>'
+      +'<button class="o" onclick="act(\'toy\',\''+id+'\')">Beli mainan (300)</button>';
+    r.appendChild(d);
+  });
+}
+function fx(id,sym){
+  const d=$('pet-'+id);if(!d)return;
+  const s=document.createElement('span');s.className='fly';s.innerText=sym;d.appendChild(s);
+  setTimeout(()=>s.remove(),1000);
+  const e=d.querySelector('.em');e.classList.add('wig');setTimeout(()=>e.classList.remove('wig'),1000);
+}
+function pat(id){fx(id,'❤️');}
+async function act(kind,id){
+  if(busy)return;busy=true;
+  try{
+    const before=lvl(S.pets[id]);
+    const r=await guard(api('buy',kind,id));
+    setState(r.state);flash(r.msg);renderRoom();
+    if(!r.ok)return;
+    fx(id,{feed:'🍖',play:TOY[id],toy:'🎁'}[kind]);
+    if(lvl(r.state.pets[id])>before){flash('Naik level! 🎉');fx(id,'🎉');}
+  }finally{busy=false}
+}
+
+init();
+</script>
+</body>
+</html>
